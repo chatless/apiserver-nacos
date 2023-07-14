@@ -43,9 +43,11 @@ type Checker struct {
 	connectionMgr *ConnectionManager
 	clientMgr     *ConnectionClientManager
 
-	lock          sync.RWMutex
+	lock sync.RWMutex
+	// selfInstances 北极星服务端节点信息数据
 	selfInstances map[string]*service_manage.Instance
-	instances     map[string]*service_manage.Instance
+	// nacos v2 客户端节点数据
+	instances map[string]*service_manage.Instance
 
 	leader int32
 
@@ -196,6 +198,8 @@ func (c *Checker) realCheck() {
 	for id := range turnUnhealth {
 		ids = append(ids, id)
 	}
+
+	// FIXME 这里需要重新想一个方案用于检查 Nacos V2 客户端注册的服务实例是否健康
 	if err := c.discoverSvr.Cache().GetStore().
 		BatchSetInstanceHealthStatus(ids, model.StatusBoolToInt(false), utils.NewUUID()); err != nil {
 		nacoslog.Error("[NACOS-V2][Checker] batch set instance health_status to unhealthy",

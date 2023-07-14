@@ -30,6 +30,7 @@ import (
 	"github.com/polarismesh/polaris/service/healthcheck"
 
 	"github.com/polaris-contrib/apiserver-nacos/core"
+	"github.com/polaris-contrib/apiserver-nacos/model"
 	nacosv1 "github.com/polaris-contrib/apiserver-nacos/v1"
 	nacosv2 "github.com/polaris-contrib/apiserver-nacos/v2"
 )
@@ -103,6 +104,10 @@ func (n *NacosServer) Initialize(ctx context.Context, option map[string]interfac
 			KeyFile:       tlsConfig.KeyFile,
 			TrustedCAFile: tlsConfig.TrustedCAFile,
 		}
+	}
+
+	if raw, _ := option["defaultNamespace"].(string); raw != "" {
+		model.ConvertPolarisNamespaceVal = raw
 	}
 
 	return nil

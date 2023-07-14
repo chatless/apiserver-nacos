@@ -98,17 +98,19 @@ func DefaultString(s, d string) string {
 	return s
 }
 
+var ConvertPolarisNamespaceVal = "default"
+
 // ToPolarisNamespace 替换 nacos namespace 为 polaris 的 namespace 信息，主要是针对默认命令空间转为 polaris 的 default
 func ToPolarisNamespace(ns string) string {
 	if ns == "" || ns == DefaultNacosNamespace {
-		return "default"
+		return ConvertPolarisNamespaceVal
 	}
 	return ns
 }
 
 // ToNacosNamespace 替换 polaris namespace 为 nacos 的 namespace 信息，恢复下发 nacos 的数据包信息
 func ToNacosNamespace(ns string) string {
-	if ns == "default" {
+	if ns == ConvertPolarisNamespaceVal {
 		return "public"
 	}
 	return ns

@@ -33,3 +33,12 @@ func (h *NacosV2Server) handleServerCheckRequest(ctx context.Context, req nacosp
 	resp.ConnectionId = ValueConnID(ctx)
 	return resp, nil
 }
+
+// handleHealthCheckRequest 主要用于客户端检查自己和 server 长连接的健康状态
+func (h *NacosV2Server) handleHealthCheckRequest(ctx context.Context, req nacospb.BaseRequest,
+	meta nacospb.RequestMeta) (nacospb.BaseResponse, error) {
+	if _, ok := req.(*nacospb.HealthCheckRequest); !ok {
+		return nil, ErrorInvalidRequestBodyType
+	}
+	return nacospb.NewHealthCheckResponse(), nil
+}

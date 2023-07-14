@@ -25,15 +25,13 @@ bootstrap:
       rotationMaxBackups: 10
       rotationMaxAge: 7
       outputLevel: info
-      # outputPaths:
-      # - stdout
-      # errorOutputPaths:
-      # - stderr
 apiservers:
   - name: service-nacos
     option:
       listenIP: "0.0.0.0"
       listenPort: 8848
+      # 设置 nacos 默认命名空间对应 Polaris 命名空间信息
+      defaultNamespace: default
       connLimit:
         openConnLimit: false
         maxConnPerHost: 128

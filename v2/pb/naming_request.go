@@ -27,7 +27,7 @@ import (
 
 // NamingRequest
 type NamingRequest struct {
-	*Request
+	Request
 	Namespace   string `json:"namespace"`
 	ServiceName string `json:"serviceName"`
 	GroupName   string `json:"groupName"`
@@ -73,7 +73,7 @@ func (r *NamingRequest) GetStringToSign() string {
 
 // InstanceRequest
 type InstanceRequest struct {
-	*NamingRequest
+	NamingRequest
 	Type     string         `json:"type"`
 	Instance model.Instance `json:"instance"`
 }
@@ -121,7 +121,7 @@ func (r *BatchInstanceRequest) Normalize() {
 
 // NotifySubscriberRequest
 type NotifySubscriberRequest struct {
-	*NamingRequest
+	NamingRequest
 	ServiceInfo *model.ServiceInfo `json:"serviceInfo"`
 }
 
@@ -138,7 +138,7 @@ func (r *NotifySubscriberRequest) GetRequestType() string {
 
 // SubscribeServiceRequest
 type SubscribeServiceRequest struct {
-	*NamingRequest
+	NamingRequest
 	Subscribe bool   `json:"subscribe"`
 	Clusters  string `json:"clusters"`
 }
@@ -158,7 +158,7 @@ func (r *SubscribeServiceRequest) GetRequestType() string {
 
 // ServiceListRequest
 type ServiceListRequest struct {
-	*NamingRequest
+	NamingRequest
 	PageNo   int    `json:"pageNo"`
 	PageSize int    `json:"pageSize"`
 	Selector string `json:"selector"`
@@ -180,7 +180,7 @@ func (r *ServiceListRequest) GetRequestType() string {
 
 // ServiceQueryRequest
 type ServiceQueryRequest struct {
-	*NamingRequest
+	NamingRequest
 	Cluster     string `json:"cluster"`
 	HealthyOnly bool   `json:"healthyOnly"`
 	UdpPort     int    `json:"udpPort"`

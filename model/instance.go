@@ -146,6 +146,7 @@ func (i *Instance) ToSpecInstance() *apiservice.Instance {
 	return ret
 }
 
+// ClientBeat nacos v1 客户端心跳上报信息
 type ClientBeat struct {
 	Namespace   string            `json:"namespace"`
 	ServiceName string            `json:"serviceName"`
@@ -157,10 +158,7 @@ type ClientBeat struct {
 	Metadata    map[string]string `json:"metadata"`
 }
 
-func (c *ClientBeat) ToSpecInstance() (*apiservice.Instance, error) {
-	return nil, nil
-}
-
+// PrepareSpecInstance nacos instance 转为 polari instance，并填充元数据信息
 func PrepareSpecInstance(namespace, service string, ins *Instance) *apiservice.Instance {
 	pSvc := ReplaceNacosService(service)
 
@@ -180,6 +178,7 @@ func ReplaceNacosService(service string) string {
 }
 
 func BuildServiceName(svcName, groupName string) string {
+	// 如果分组名称为 DEFAULT_GROUP，则不会拼接到服务名称中去
 	if groupName == DefaultServiceGroup {
 		return svcName
 	}
