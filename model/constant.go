@@ -26,6 +26,10 @@ const (
 )
 
 const (
+	DefaultListenPort = 8848
+)
+
+const (
 	ParamCode              = "code"
 	ParamServiceName       = "serviceName"
 	ParamClusterList       = "clusters"

@@ -77,39 +77,25 @@ func (n *NacosServer) Initialize(ctx context.Context, option map[string]interfac
 	apiConf map[string]apiserver.APIConfig) error {
 	n.option = option
 	n.apiConf = apiConf
-	listenPort, _ := option["listenPort"].(int64)
-	if listenPort == 0 {
-		listenPort = 8848
+
+	cfg, err := loadNacosConfig(option)
+	if err != nil {
+		return err
 	}
-	n.httpPort = uint32(listenPort)
-	n.grpcPort = uint32(listenPort + 1000)
+
+	n.httpPort = uint32(cfg.ListenPort)
+	n.grpcPort = uint32(cfg.ListenPort + 1000)
 
 	// 连接数限制的配置
-	if raw, _ := option["connLimit"].(map[interface{}]interface{}); raw != nil {
-		connLimitConfig, err := connlimit.ParseConnLimitConfig(raw)
-		if err != nil {
-			return err
-		}
-		n.connLimitConfig = connLimitConfig
-	}
+	n.connLimitConfig = cfg.ConnLimit
 
 	// tls 配置信息
-	if raw, _ := option["tls"].(map[interface{}]interface{}); raw != nil {
-		tlsConfig, err := secure.ParseTLSConfig(raw)
-		if err != nil {
-			return err
-		}
-		n.tlsInfo = &secure.TLSInfo{
-			CertFile:      tlsConfig.CertFile,
-			KeyFile:       tlsConfig.KeyFile,
-			TrustedCAFile: tlsConfig.TrustedCAFile,
-		}
+	n.tlsInfo = &secure.TLSInfo{
+		CertFile:      cfg.TLS.CertFile,
+		KeyFile:       cfg.TLS.KeyFile,
+		TrustedCAFile: cfg.TLS.TrustedCAFile,
 	}
-
-	if raw, _ := option["defaultNamespace"].(string); raw != "" {
-		model.ConvertPolarisNamespaceVal = raw
-	}
-
+	model.ConvertPolarisNamespaceVal = cfg.DefaultNamespace
 	return nil
 }
 
