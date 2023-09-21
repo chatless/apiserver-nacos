@@ -15,7 +15,7 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package v2
+package discover
 
 import (
 	"context"
@@ -24,13 +24,14 @@ import (
 	"github.com/polaris-contrib/apiserver-nacos/core"
 	"github.com/polaris-contrib/apiserver-nacos/model"
 	nacospb "github.com/polaris-contrib/apiserver-nacos/v2/pb"
+	"github.com/polaris-contrib/apiserver-nacos/v2/remote"
 )
 
-func (h *NacosV2Server) handleServiceQueryRequest(ctx context.Context, req nacospb.BaseRequest,
+func (h *DiscoverServer) handleServiceQueryRequest(ctx context.Context, req nacospb.BaseRequest,
 	meta nacospb.RequestMeta) (nacospb.BaseResponse, error) {
 	svcQueryReq, ok := req.(*nacospb.ServiceQueryRequest)
 	if !ok {
-		return nil, ErrorInvalidRequestBodyType
+		return nil, remote.ErrorInvalidRequestBodyType
 	}
 	resp := &nacospb.QueryServiceResponse{
 		Response: &nacospb.Response{

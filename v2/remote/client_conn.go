@@ -15,7 +15,7 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package v2
+package remote
 
 import (
 	"context"
@@ -27,7 +27,6 @@ import (
 	"time"
 
 	"github.com/polarismesh/polaris/common/eventhub"
-	"github.com/polarismesh/polaris/common/model"
 	commontime "github.com/polarismesh/polaris/common/time"
 	"github.com/polarismesh/polaris/common/utils"
 	"go.uber.org/zap"
@@ -82,9 +81,17 @@ type (
 	// SyncServerStream
 	SyncServerStream struct {
 		lock   sync.Mutex
-		stream grpc.ServerStream
+		Stream grpc.ServerStream
 	}
 )
+
+func (c *Client) SetStreamRef(stream *SyncServerStream) {
+	c.streamRef.Store(stream)
+}
+
+func (c *Client) LoadStream() (*SyncServerStream, bool) {
+	return c.loadStream()
+}
 
 func (c *Client) loadStream() (*SyncServerStream, bool) {
 	val := c.streamRef.Load()
@@ -105,13 +112,13 @@ func (c *Client) Close() {
 
 // Context returns the context for this stream.
 func (s *SyncServerStream) Context() context.Context {
-	return s.stream.Context()
+	return s.Stream.Context()
 }
 
 func (s *SyncServerStream) SendMsg(m interface{}) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
-	return s.stream.SendMsg(m)
+	return s.Stream.SendMsg(m)
 }
 
 const (
@@ -131,7 +138,7 @@ type ConnectionManager struct {
 	cancel      context.CancelFunc
 }
 
-func newConnectionManager() *ConnectionManager {
+func NewConnectionManager() *ConnectionManager {
 	ctx, cancel := context.WithCancel(context.Background())
 	mgr := &ConnectionManager{
 		connections: map[string]*Client{},
@@ -142,6 +149,10 @@ func newConnectionManager() *ConnectionManager {
 	}
 	go mgr.connectionActiveCheck(ctx)
 	return mgr
+}
+
+func (h *ConnectionManager) InFlights() *InFlights {
+	return h.inFlights
 }
 
 // OnAccept call when net.Conn accept
@@ -201,7 +212,7 @@ func (h *ConnectionManager) RegisterConnection(ctx context.Context, payload *nac
 func (h *ConnectionManager) UnRegisterConnection(connID string) {
 	h.lock.Lock()
 	defer h.lock.Unlock()
-	eventhub.Publish(ClientConnectionEvent, ConnectionEvent{
+	eventhub.Publish(ClientConnectionEvent, &ConnectionEvent{
 		EventType: EventClientDisConnected,
 		ConnID:    connID,
 		Client:    h.clients[connID],
@@ -288,7 +299,7 @@ func (h *ConnectionManager) HandleConn(ctx context.Context, s stats.ConnStats) {
 		defer h.lock.RUnlock()
 		connID, _ := ctx.Value(ConnIDKey{}).(string)
 		nacoslog.Info("[NACOS-V2][ConnMgr] grpc conn begin", zap.String("conn-id", connID))
-		eventhub.Publish(ClientConnectionEvent, ConnectionEvent{
+		eventhub.Publish(ClientConnectionEvent, &ConnectionEvent{
 			EventType: EventClientConnected,
 			ConnID:    connID,
 			Client:    h.clients[connID],
@@ -322,6 +333,10 @@ func (h *ConnectionManager) GetStream(connID string) *SyncServerStream {
 	client := h.clients[connID]
 	stream, _ := client.loadStream()
 	return stream
+}
+
+func (h *ConnectionManager) ListConnections() map[string]*Client {
+	return h.listConnections()
 }
 
 func (h *ConnectionManager) listConnections() map[string]*Client {
@@ -418,154 +433,17 @@ func (h *ConnectionManager) connectionActiveCheck(ctx context.Context) {
 	}
 }
 
-type (
-	// ConnectionClientManager
-	ConnectionClientManager struct {
-		lock        sync.RWMutex
-		clients     map[string]*ConnectionClient // ConnID => ConnectionClient
-		inteceptors []ClientConnectionInterceptor
-	}
-
-	// ClientConnectionInterceptor
-	ClientConnectionInterceptor interface {
-		// HandleClientConnect .
-		HandleClientConnect(ctx context.Context, client *ConnectionClient)
-		// HandleClientDisConnect .
-		HandleClientDisConnect(ctx context.Context, client *ConnectionClient)
-	}
-
-	// ConnectionClient .
-	ConnectionClient struct {
-		// ConnID 物理连接唯一ID标识
-		ConnID string
-		lock   sync.RWMutex
-		// PublishInstances 这个连接上发布的实例信息
-		PublishInstances map[model.ServiceKey]map[string]struct{}
-		destroy          int32
-	}
-)
-
-func newConnectionClientManager(inteceptors []ClientConnectionInterceptor) *ConnectionClientManager {
-	mgr := &ConnectionClientManager{
-		clients: map[string]*ConnectionClient{},
-	}
-	_ = eventhub.Subscribe(ClientConnectionEvent, utils.NewUUID(), mgr)
-	return mgr
+func ValueConnID(ctx context.Context) string {
+	ret, _ := ctx.Value(ConnIDKey{}).(string)
+	return ret
 }
 
-// PreProcess do preprocess logic for event
-func (cm *ConnectionClientManager) PreProcess(_ context.Context, a any) any {
-	return a
+func ValueClientIP(ctx context.Context) string {
+	ret, _ := ctx.Value(ClientIPKey{}).(string)
+	return ret
 }
 
-// OnEvent event process logic
-func (c *ConnectionClientManager) OnEvent(ctx context.Context, a any) error {
-	event, ok := a.(ConnectionEvent)
-	if !ok {
-		return nil
-	}
-	switch event.EventType {
-	case EventClientConnected:
-		c.addConnectionClientIfAbsent(event.ConnID)
-		c.lock.RLock()
-		defer c.lock.RUnlock()
-		client := c.clients[event.ConnID]
-		for i := range c.inteceptors {
-			c.inteceptors[i].HandleClientConnect(ctx, client)
-		}
-	case EventClientDisConnected:
-		c.lock.Lock()
-		defer c.lock.Unlock()
-
-		client, ok := c.clients[event.ConnID]
-		if ok {
-			for i := range c.inteceptors {
-				c.inteceptors[i].HandleClientDisConnect(ctx, client)
-			}
-			client.Destroy()
-			delete(c.clients, event.ConnID)
-		}
-	}
-
-	return nil
-}
-
-func (c *ConnectionClientManager) addServiceInstance(connID string, svc model.ServiceKey, instanceIDS ...string) {
-	c.addConnectionClientIfAbsent(connID)
-	c.lock.RLock()
-	defer c.lock.RUnlock()
-	client := c.clients[connID]
-	client.addServiceInstance(svc, instanceIDS...)
-}
-
-func (c *ConnectionClientManager) delServiceInstance(connID string, svc model.ServiceKey, instanceIDS ...string) {
-	c.addConnectionClientIfAbsent(connID)
-	c.lock.RLock()
-	defer c.lock.RUnlock()
-	client := c.clients[connID]
-	client.delServiceInstance(svc, instanceIDS...)
-}
-
-func (c *ConnectionClientManager) addConnectionClientIfAbsent(connID string) {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-
-	if _, ok := c.clients[connID]; !ok {
-		client := &ConnectionClient{
-			ConnID:           connID,
-			PublishInstances: make(map[model.ServiceKey]map[string]struct{}),
-		}
-		c.clients[connID] = client
-	}
-}
-
-func (c *ConnectionClient) RangePublishInstance(f func(svc model.ServiceKey, ids []string)) {
-	c.lock.RLock()
-	defer c.lock.RUnlock()
-
-	for svc, ids := range c.PublishInstances {
-		ret := make([]string, 0, 16)
-		for i := range ids {
-			ret = append(ret, i)
-		}
-		f(svc, ret)
-	}
-}
-
-func (c *ConnectionClient) addServiceInstance(svc model.ServiceKey, instanceIDS ...string) {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-
-	if _, ok := c.PublishInstances[svc]; !ok {
-		c.PublishInstances[svc] = map[string]struct{}{}
-	}
-	publishInfos := c.PublishInstances[svc]
-
-	for i := range instanceIDS {
-		publishInfos[instanceIDS[i]] = struct{}{}
-	}
-	c.PublishInstances[svc] = publishInfos
-}
-
-func (c *ConnectionClient) delServiceInstance(svc model.ServiceKey, instanceIDS ...string) {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-
-	if _, ok := c.PublishInstances[svc]; !ok {
-		c.PublishInstances[svc] = map[string]struct{}{}
-	}
-	publishInfos := c.PublishInstances[svc]
-
-	for i := range instanceIDS {
-		delete(publishInfos, instanceIDS[i])
-	}
-	c.PublishInstances[svc] = publishInfos
-}
-
-func (c *ConnectionClient) Destroy() {
-	atomic.StoreInt32(&c.destroy, 1)
-}
-
-func (c *ConnectionClient) isDestroy() bool {
-	return atomic.LoadInt32(&c.destroy) == 1
+func ValueConnMeta(ctx context.Context) ConnectionMeta {
+	ret, _ := ctx.Value(ConnectionInfoKey{}).(ConnectionMeta)
+	return ret
 }

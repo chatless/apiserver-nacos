@@ -26,10 +26,10 @@ import (
 
 	"github.com/polarismesh/polaris/common/utils"
 	"go.uber.org/zap"
-	"google.golang.org/protobuf/types/known/anypb"
 
 	nacosmodel "github.com/polaris-contrib/apiserver-nacos/model"
 	nacospb "github.com/polaris-contrib/apiserver-nacos/v2/pb"
+	"github.com/polaris-contrib/apiserver-nacos/v2/remote"
 )
 
 var (
@@ -65,30 +65,32 @@ func (h *NacosV2Server) Request(ctx context.Context, payload *nacospb.Payload) (
 	}
 
 	if _, ok := debugLevel[msg.GetRequestType()]; !ok {
-		nacoslog.Info("[NACOS-V2] handler client request", zap.String("conn-id", ValueConnID(ctx)),
+		nacoslog.Info("[NACOS-V2] handler client request", zap.String("conn-id", remote.ValueConnID(ctx)),
 			utils.ZapRequestID(msg.GetRequestId()),
 			zap.String("type", msg.GetRequestType()),
 		)
 	} else {
 		if nacoslog.DebugEnabled() {
-			nacoslog.Debug("[NACOS-V2] handler client request", zap.String("conn-id", ValueConnID(ctx)),
+			nacoslog.Debug("[NACOS-V2] handler client request", zap.String("conn-id", remote.ValueConnID(ctx)),
 				utils.ZapRequestID(msg.GetRequestId()),
 				zap.String("type", msg.GetRequestType()),
 			)
 		}
 	}
-	connMeta := ValueConnMeta(ctx)
+	connMeta := remote.ValueConnMeta(ctx)
 
 	startTime := time.Now()
+	// TODO 前置鉴权检查拦截
+
 	resp, err := handle(ctx, msg, nacospb.RequestMeta{
-		ConnectionID:  ValueConnID(ctx),
+		ConnectionID:  remote.ValueConnID(ctx),
 		ClientIP:      payload.GetMetadata().GetClientIp(),
 		ClientVersion: connMeta.Version,
 		Labels:        connMeta.Labels,
 	})
 	// 打印耗时超过1s的请求
 	if diff := time.Since(startTime); diff > time.Second {
-		nacoslog.Info("[NACOS-V2] handler client request", zap.String("conn-id", ValueConnID(ctx)),
+		nacoslog.Info("[NACOS-V2] handler client request", zap.String("conn-id", remote.ValueConnID(ctx)),
 			utils.ZapRequestID(msg.GetRequestId()),
 			zap.String("type", msg.GetRequestType()),
 			zap.Duration("handling-time", diff),
@@ -100,7 +102,7 @@ func (h *NacosV2Server) Request(ctx context.Context, payload *nacospb.Payload) (
 	}
 
 	resp.SetRequestId(msg.GetRequestId())
-	return h.MarshalPayload(resp)
+	return remote.MarshalPayload(resp)
 }
 
 func toNacosErrorResp(err error) nacospb.BaseResponse {
@@ -135,14 +137,12 @@ func toNacosErrorResp(err error) nacospb.BaseResponse {
 
 func (h *NacosV2Server) RequestBiStream(svr nacospb.BiRequestStream_RequestBiStreamServer) error {
 	ctx := h.ConvertContext(svr.Context())
-	connID := ValueConnID(ctx)
+	connID := remote.ValueConnID(ctx)
 	client, ok := h.connectionManager.GetClient(connID)
 	if ok {
-		client.streamRef.Store(&SyncServerStream{
-			stream: svr,
-		})
+		client.SetStreamRef(&remote.SyncServerStream{Stream: svr})
 	}
-	nacoslog.Info("[NACOS-V2] client use birequest to register stream", zap.String("conn-id", ValueConnID(ctx)))
+	nacoslog.Info("[NACOS-V2] client use birequest to register stream", zap.String("conn-id", remote.ValueConnID(ctx)))
 
 	for {
 		req, err := svr.Recv()
@@ -159,7 +159,7 @@ func (h *NacosV2Server) RequestBiStream(svr nacospb.BiRequestStream_RequestBiStr
 		}
 		switch msg := val.(type) {
 		case *nacospb.ConnectionSetupRequest:
-			nacoslog.Info("[NACOS-V2] handler client birequest", zap.String("conn-id", ValueConnID(ctx)),
+			nacoslog.Info("[NACOS-V2] handler client birequest", zap.String("conn-id", remote.ValueConnID(ctx)),
 				utils.ZapRequestID(msg.GetRequestId()),
 				zap.String("type", msg.GetRequestType()),
 			)
@@ -167,19 +167,19 @@ func (h *NacosV2Server) RequestBiStream(svr nacospb.BiRequestStream_RequestBiStr
 				return err
 			}
 		case nacospb.BaseResponse:
-			nacoslog.Info("[NACOS-V2] handler client birequest", zap.String("conn-id", ValueConnID(ctx)),
+			nacoslog.Info("[NACOS-V2] handler client birequest", zap.String("conn-id", remote.ValueConnID(ctx)),
 				utils.ZapRequestID(msg.GetRequestId()),
 				zap.String("resp-type", msg.GetResponseType()),
 			)
 			// notify ack msg to callback
-			h.connectionManager.inFlights.NotifyInFlight(connID, msg)
+			h.connectionManager.InFlights().NotifyInFlight(connID, msg)
 			h.connectionManager.RefreshClient(ctx)
 		}
 	}
 }
 
 // UnmarshalPayload .
-func (h *NacosV2Server) UnmarshalPayload(payload *nacospb.Payload) (RequestHandler, nacospb.CustomerPayload, error) {
+func (h *NacosV2Server) UnmarshalPayload(payload *nacospb.Payload) (remote.RequestHandler, nacospb.CustomerPayload, error) {
 	t := payload.GetMetadata().GetType()
 	nacoslog.Debug("[API-Server][NACOS-V2] unmarshal payload info", zap.String("type", t))
 	handler, ok := h.handleRegistry[t]
@@ -191,40 +191,4 @@ func (h *NacosV2Server) UnmarshalPayload(payload *nacospb.Payload) (RequestHandl
 		return nil, nil, err
 	}
 	return handler.Handler, msg, nil
-}
-
-// MarshalPayload .
-func (h *NacosV2Server) MarshalPayload(valu interface{}) (*nacospb.Payload, error) {
-	switch resp := valu.(type) {
-	case nacospb.BaseResponse:
-		data, err := json.Marshal(resp)
-		if err != nil {
-			return nil, err
-		}
-		payload := &nacospb.Payload{
-			Metadata: &nacospb.Metadata{
-				Type: resp.GetResponseType(),
-			},
-			Body: &anypb.Any{
-				Value: data,
-			},
-		}
-		return payload, nil
-	case nacospb.BaseRequest:
-		data, err := json.Marshal(resp)
-		if err != nil {
-			return nil, err
-		}
-		payload := &nacospb.Payload{
-			Metadata: &nacospb.Metadata{
-				Type: resp.GetRequestType(),
-			},
-			Body: &anypb.Any{
-				Value: data,
-			},
-		}
-		return payload, nil
-	default:
-		return nil, errors.New("value no pb.BaseResponse or pb.BaseRequest")
-	}
 }

@@ -9,13 +9,13 @@
  *
  * https://opensource.org/licenses/BSD-3-Clause
  *
- * Unless required by applicable law or agreed to in writing, software distributed
+ * Unless nacoshttp.Required by applicable law or agreed to in writing, software distributed
  * under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
  * CONDITIONS OF ANY KIND, either express or implied. See the License for the
  * specific language governing permissions and limitations under the License.
  */
 
-package v1
+package discover
 
 import (
 	"encoding/json"
@@ -27,20 +27,21 @@ import (
 	"github.com/emicklei/go-restful/v3"
 
 	"github.com/polaris-contrib/apiserver-nacos/model"
+	nacoshttp "github.com/polaris-contrib/apiserver-nacos/v1/http"
 )
 
 func BuildInstance(namespace string, req *restful.Request) (*model.Instance, error) {
-	service, err := required(req, model.ParamServiceName)
+	service, err := nacoshttp.Required(req, model.ParamServiceName)
 	if err != nil {
 		return nil, err
 	}
-	host, err := required(req, model.ParamInstanceIP)
+	host, err := nacoshttp.Required(req, model.ParamInstanceIP)
 	if err != nil {
 		return nil, err
 	}
-	portStr, err := required(req, model.ParamInstancePort)
+	portStr, err := nacoshttp.Required(req, model.ParamInstancePort)
 	port, _ := strconv.ParseInt(portStr, 10, 32)
-	weightStr := optional(req, model.ParamInstanceWeight, "1")
+	weightStr := nacoshttp.Optional(req, model.ParamInstanceWeight, "1")
 	weight, _ := strconv.ParseFloat(weightStr, 64)
 	if weight > model.InstanceMaxWeight || weight < model.InstanceMinWeight {
 		return nil, &model.NacosError{
@@ -49,18 +50,18 @@ func BuildInstance(namespace string, req *restful.Request) (*model.Instance, err
 				model.InstanceMinWeight, model.InstanceMaxWeight),
 		}
 	}
-	cluster := optional(req, model.ParamClusterName, "")
+	cluster := nacoshttp.Optional(req, model.ParamClusterName, "")
 	if len(cluster) == 0 {
-		cluster = optional(req, model.ParamCluster, model.DefaultServiceClusterName)
+		cluster = nacoshttp.Optional(req, model.ParamCluster, model.DefaultServiceClusterName)
 	}
-	healthyStr := optional(req, model.ParamInstanceHealthy, "true")
+	healthyStr := nacoshttp.Optional(req, model.ParamInstanceHealthy, "true")
 	healthy, _ := strconv.ParseBool(healthyStr)
-	enableStr := optional(req, model.ParamInstanceEnabled, "")
+	enableStr := nacoshttp.Optional(req, model.ParamInstanceEnabled, "")
 	if len(enableStr) == 0 {
-		enableStr = optional(req, model.ParamInstanceEnable, "true")
+		enableStr = nacoshttp.Optional(req, model.ParamInstanceEnable, "true")
 	}
 	enable, _ := strconv.ParseBool(enableStr)
-	metadataStr := optional(req, model.ParamInstanceMetadata, "")
+	metadataStr := nacoshttp.Optional(req, model.ParamInstanceMetadata, "")
 	metadata, err := parseaMetadata(metadataStr)
 	if err != nil {
 		return nil, err
@@ -82,14 +83,14 @@ func BuildInstance(namespace string, req *restful.Request) (*model.Instance, err
 
 func BuildClientBeat(req *restful.Request) (*model.ClientBeat, error) {
 	beatInfo := &model.ClientBeat{}
-	beatStr := optional(req, model.ParamInstanceBeat, "")
+	beatStr := nacoshttp.Optional(req, model.ParamInstanceBeat, "")
 	if len(beatStr) != 0 && json.Valid([]byte(beatStr)) {
 		_ = json.Unmarshal([]byte(beatStr), beatInfo)
 	}
-	host := optional(req, model.ParamInstanceIP, "")
-	portStr := optional(req, model.ParamInstancePort, "0")
+	host := nacoshttp.Optional(req, model.ParamInstanceIP, "")
+	portStr := nacoshttp.Optional(req, model.ParamInstancePort, "0")
 	port, _ := strconv.ParseInt(portStr, 10, 32)
-	cluster := optional(req, model.ParamClusterName, model.DefaultServiceClusterName)
+	cluster := nacoshttp.Optional(req, model.ParamClusterName, model.DefaultServiceClusterName)
 	if len(beatInfo.Ip) != 0 && beatInfo.Port != 0 {
 		if len(beatInfo.Cluster) == 0 {
 			beatInfo.Cluster = cluster
@@ -99,9 +100,9 @@ func BuildClientBeat(req *restful.Request) (*model.ClientBeat, error) {
 		beatInfo.Port = int(port)
 	}
 
-	namespace := optional(req, model.ParamNamespaceID, model.DefaultNacosNamespace)
+	namespace := nacoshttp.Optional(req, model.ParamNamespaceID, model.DefaultNacosNamespace)
 	namespace = model.ToPolarisNamespace(namespace)
-	service, err := required(req, model.ParamServiceName)
+	service, err := nacoshttp.Required(req, model.ParamServiceName)
 	if err != nil {
 		return nil, err
 	}
@@ -136,34 +137,4 @@ func parseaMetadata(metadataStr string) (map[string]string, error) {
 	}
 
 	return metadata, nil
-}
-
-func optional(req *restful.Request, key, defaultVal string) string {
-	val := req.QueryParameter(key)
-	val = strings.TrimSpace(val)
-	if len(val) == 0 {
-		return defaultVal
-	}
-	return val
-}
-
-func required(req *restful.Request, key string) (string, error) {
-	val := req.QueryParameter(key)
-	val = strings.TrimSpace(val)
-	if len(val) == 0 {
-		return "", fmt.Errorf("key: %s required", key)
-	}
-	return val, nil
-}
-
-func requiredInt(req *restful.Request, key string) (int, error) {
-	strValue, err := required(req, key)
-	if err != nil {
-		return 0, err
-	}
-	value, err := strconv.Atoi(strValue)
-	if err != nil {
-		return 0, fmt.Errorf("key: %s is not a number", key)
-	}
-	return value, nil
 }

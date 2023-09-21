@@ -15,7 +15,7 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package v2
+package discover
 
 import (
 	"context"
@@ -27,13 +27,14 @@ import (
 	"github.com/polaris-contrib/apiserver-nacos/core"
 	nacosmodel "github.com/polaris-contrib/apiserver-nacos/model"
 	nacospb "github.com/polaris-contrib/apiserver-nacos/v2/pb"
+	"github.com/polaris-contrib/apiserver-nacos/v2/remote"
 )
 
-func (h *NacosV2Server) handleSubscribeServiceReques(ctx context.Context, req nacospb.BaseRequest,
+func (h *DiscoverServer) handleSubscribeServiceReques(ctx context.Context, req nacospb.BaseRequest,
 	meta nacospb.RequestMeta) (nacospb.BaseResponse, error) {
 	subReq, ok := req.(*nacospb.SubscribeServiceRequest)
 	if !ok {
-		return nil, ErrorInvalidRequestBodyType
+		return nil, remote.ErrorInvalidRequestBodyType
 	}
 	namespace := nacosmodel.ToPolarisNamespace(subReq.Namespace)
 	service := subReq.ServiceName
@@ -42,8 +43,8 @@ func (h *NacosV2Server) handleSubscribeServiceReques(ctx context.Context, req na
 		zap.String("service", service), zap.String("group", group))
 
 	subscriber := core.Subscriber{
-		Key:         ValueConnID(ctx),
-		ConnID:      ValueConnID(ctx),
+		Key:         remote.ValueConnID(ctx),
+		ConnID:      remote.ValueConnID(ctx),
 		AddrStr:     meta.ClientIP,
 		Agent:       meta.ClientVersion,
 		App:         nacosmodel.DefaultString(req.GetHeaders()["app"], "unknown"),
@@ -78,13 +79,13 @@ func (h *NacosV2Server) handleSubscribeServiceReques(ctx context.Context, req na
 	}, nil
 }
 
-func (h *NacosV2Server) sendPushData(sub core.Subscriber, data *core.PushData) error {
+func (h *DiscoverServer) sendPushData(sub core.Subscriber, data *core.PushData) error {
 	client, ok := h.connectionManager.GetClient(sub.ConnID)
 	if !ok {
 		nacoslog.Error("[NACOS-V2][PushCenter] notify subscriber client not found", zap.String("conn-id", sub.ConnID))
 		return nil
 	}
-	stream, ok := client.loadStream()
+	stream, ok := client.LoadStream()
 	if !ok {
 		nacoslog.Error("[NACOS-V2][PushCenter] notify subscriber not register gRPC stream",
 			zap.String("conn-id", sub.ConnID))
@@ -102,7 +103,7 @@ func (h *NacosV2Server) sendPushData(sub core.Subscriber, data *core.PushData) e
 		zap.String("req-id", req.RequestId),
 		zap.String("namespace", data.Service.Namespace), zap.String("svc", data.Service.Name))
 
-	connCtx := context.WithValue(context.TODO(), ConnIDKey{}, watcher.ConnID)
+	connCtx := context.WithValue(context.TODO(), remote.ConnIDKey{}, watcher.ConnID)
 	callback := func(resp nacospb.BaseResponse, err error) {
 		if err != nil {
 			nacoslog.Error("[NACOS-V2][PushCenter] receive client push error",
@@ -118,7 +119,7 @@ func (h *NacosV2Server) sendPushData(sub core.Subscriber, data *core.PushData) e
 	}
 
 	// add inflight first
-	err := h.connectionManager.inFlights.AddInFlight(&InFlight{
+	err := h.connectionManager.InFlights().AddInFlight(&remote.InFlight{
 		ConnID:    watcher.ConnID,
 		RequestID: req.RequestId,
 		Callback:  callback,
@@ -130,7 +131,7 @@ func (h *NacosV2Server) sendPushData(sub core.Subscriber, data *core.PushData) e
 			zap.Error(err))
 	}
 
-	clientResp, err := h.MarshalPayload(req)
+	clientResp, err := remote.MarshalPayload(req)
 	if err != nil {
 		return err
 	}

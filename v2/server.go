@@ -25,17 +25,13 @@ import (
 	"time"
 
 	"github.com/polarismesh/polaris/apiserver"
-	"github.com/polarismesh/polaris/auth"
 	api "github.com/polarismesh/polaris/common/api/v1"
 	connhook "github.com/polarismesh/polaris/common/conn/hook"
 	connlimit "github.com/polarismesh/polaris/common/conn/limit"
 	"github.com/polarismesh/polaris/common/metrics"
 	"github.com/polarismesh/polaris/common/secure"
 	"github.com/polarismesh/polaris/common/utils"
-	"github.com/polarismesh/polaris/namespace"
 	"github.com/polarismesh/polaris/plugin"
-	"github.com/polarismesh/polaris/service"
-	"github.com/polarismesh/polaris/service/healthcheck"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -46,12 +42,18 @@ import (
 
 	"github.com/polaris-contrib/apiserver-nacos/core"
 	v1 "github.com/polaris-contrib/apiserver-nacos/v1"
+	"github.com/polaris-contrib/apiserver-nacos/v2/config"
+	"github.com/polaris-contrib/apiserver-nacos/v2/discover"
 	nacospb "github.com/polaris-contrib/apiserver-nacos/v2/pb"
+	"github.com/polaris-contrib/apiserver-nacos/v2/remote"
 )
 
 func NewNacosV2Server(v1Svr *v1.NacosV1Server, store *core.NacosDataStorage, options ...option) *NacosV2Server {
 	svr := &NacosV2Server{
-		store: store,
+		discoverOpt: &discover.ServerOption{
+			Store: store,
+		},
+		configOpt: &config.ServerOption{},
 	}
 
 	for i := range options {
@@ -74,24 +76,18 @@ type NacosV2Server struct {
 	server     *grpc.Server
 	ratelimit  plugin.Ratelimit
 	OpenMethod map[string]bool
+	rateLimit  plugin.Ratelimit
+	whitelist  plugin.Whitelist
 
-	rateLimit plugin.Ratelimit
-	whitelist plugin.Whitelist
+	discoverOpt *discover.ServerOption
+	discoverSvr *discover.DiscoverServer
+
+	configOpt *config.ServerOption
+	configSvr *config.ConfigServer
 
 	v1Svr             *v1.NacosV1Server
-	clientManager     *ConnectionClientManager
-	connectionManager *ConnectionManager
-	pushCenter        core.PushCenter
-	store             *core.NacosDataStorage
-	handleRegistry    map[string]*RequestHandlerWarrper
-	checker           *Checker
-
-	userSvr           auth.UserServer
-	checkerSvr        auth.StrategyServer
-	namespaceSvr      namespace.NamespaceOperateServer
-	discoverSvr       service.DiscoverServer
-	originDiscoverSvr service.DiscoverServer
-	healthSvr         *healthcheck.Server
+	connectionManager *remote.ConnectionManager
+	handleRegistry    map[string]*remote.RequestHandlerWarrper
 }
 
 // GetProtocol 获取Server的协议
@@ -107,9 +103,7 @@ func (h *NacosV2Server) Initialize(ctx context.Context, option map[string]interf
 	h.listenIP = option["listenIP"].(string)
 	h.listenPort = port
 
-	h.connectionManager = newConnectionManager()
-	h.clientManager = newConnectionClientManager([]ClientConnectionInterceptor{h})
-	h.checker = newChecker(h.originDiscoverSvr, h.connectionManager, h.clientManager)
+	h.connectionManager = remote.NewConnectionManager()
 	if raw, _ := option["connLimit"].(map[interface{}]interface{}); raw != nil {
 		connConfig, err := connlimit.ParseConnLimitConfig(raw)
 		if err != nil {
@@ -117,7 +111,6 @@ func (h *NacosV2Server) Initialize(ctx context.Context, option map[string]interf
 		}
 		h.connLimitConfig = connConfig
 	}
-
 	if raw, _ := option["tls"].(map[interface{}]interface{}); raw != nil {
 		tlsConfig, err := secure.ParseTLSConfig(raw)
 		if err != nil {
@@ -134,31 +127,13 @@ func (h *NacosV2Server) Initialize(ctx context.Context, option map[string]interf
 		nacoslog.Infof("[API-Server] %s server open the ratelimit", h.protocol)
 		h.ratelimit = ratelimit
 	}
-	grpcPush, err := NewGrpcPushCenter(h.store, h.sendPushData)
-	if err != nil {
-		return err
-	}
-	h.pushCenter = grpcPush
 	h.initHandlers()
 	return nil
 }
 
 // initHandlers .
 func (h *NacosV2Server) initHandlers() {
-	h.handleRegistry = map[string]*RequestHandlerWarrper{
-		// Request
-		nacospb.TypeInstanceRequest: {
-			Handler: h.handleInstanceRequest,
-			PayloadBuilder: func() nacospb.CustomerPayload {
-				return nacospb.NewInstanceRequest()
-			},
-		},
-		nacospb.TypeBatchInstanceRequest: {
-			Handler: h.handleBatchInstanceRequest,
-			PayloadBuilder: func() nacospb.CustomerPayload {
-				return nacospb.NewBatchInstanceRequest()
-			},
-		},
+	h.handleRegistry = map[string]*remote.RequestHandlerWarrper{
 		nacospb.TypeServerCheckRequest: {
 			Handler: h.handleServerCheckRequest,
 			PayloadBuilder: func() nacospb.CustomerPayload {
@@ -171,40 +146,13 @@ func (h *NacosV2Server) initHandlers() {
 				return nacospb.NewHealthCheckRequest()
 			},
 		},
-		nacospb.TypeSubscribeServiceRequest: {
-			Handler: h.handleSubscribeServiceReques,
-			PayloadBuilder: func() nacospb.CustomerPayload {
-				return nacospb.NewSubscribeServiceRequest()
-			},
-		},
-		nacospb.TypeServiceListRequest: {
-			Handler: h.handleServiceListRequest,
-			PayloadBuilder: func() nacospb.CustomerPayload {
-				return nacospb.NewServiceListRequest()
-			},
-		},
-		nacospb.TypeServiceQueryRequest: {
-			Handler: h.handleServiceQueryRequest,
-			PayloadBuilder: func() nacospb.CustomerPayload {
-				return nacospb.NewServiceQueryRequest()
-			},
-		},
-		// RequestBiStream
-		nacospb.TypeConnectionSetupRequest: {
-			PayloadBuilder: func() nacospb.CustomerPayload {
-				return nacospb.NewConnectionSetupRequest()
-			},
-		},
-		nacospb.TypeSubscribeServiceResponse: {
-			PayloadBuilder: func() nacospb.CustomerPayload {
-				return &nacospb.SubscribeServiceResponse{}
-			},
-		},
-		nacospb.TypeNotifySubscriberResponse: {
-			PayloadBuilder: func() nacospb.CustomerPayload {
-				return &nacospb.NotifySubscriberResponse{}
-			},
-		},
+	}
+
+	for k, v := range h.discoverSvr.ListGRPCHandlers() {
+		h.handleRegistry[k] = v
+	}
+	for k, v := range h.configSvr.ListGRPCHandlers() {
+		h.handleRegistry[k] = v
 	}
 
 	for k := range h.handleRegistry {
@@ -388,8 +336,8 @@ func (h *NacosV2Server) GetPort() uint32 {
 }
 
 // Stop stopping the gRPC server
-func (h *NacosV2Server) Stop(protocol string) {
-	connlimit.RemoveLimitListener(protocol)
+func (h *NacosV2Server) Stop() {
+	connlimit.RemoveLimitListener(h.GetProtocol())
 	if h.server != nil {
 		h.server.Stop()
 	}
@@ -450,7 +398,7 @@ func (h *NacosV2Server) ConvertContext(ctx context.Context) context.Context {
 		clientIP = ""
 		address  = ""
 		connID   = ""
-		connMeta ConnectionMeta
+		connMeta remote.ConnectionMeta
 	)
 	if pr, ok := peer.FromContext(ctx); ok && pr.Addr != nil {
 		address = pr.Addr.String()
@@ -471,23 +419,8 @@ func (h *NacosV2Server) ConvertContext(ctx context.Context) context.Context {
 	ctx = context.WithValue(ctx, utils.StringContext("request-id"), requestID)
 	ctx = context.WithValue(ctx, utils.ContextClientAddress, address)
 	ctx = context.WithValue(ctx, utils.StringContext("user-agent"), userAgent)
-	ctx = context.WithValue(ctx, ClientIPKey{}, clientIP)
-	ctx = context.WithValue(ctx, ConnIDKey{}, connID)
-	ctx = context.WithValue(ctx, ConnectionInfoKey{}, connMeta)
+	ctx = context.WithValue(ctx, remote.ClientIPKey{}, clientIP)
+	ctx = context.WithValue(ctx, remote.ConnIDKey{}, connID)
+	ctx = context.WithValue(ctx, remote.ConnectionInfoKey{}, connMeta)
 	return ctx
-}
-
-func ValueConnID(ctx context.Context) string {
-	ret, _ := ctx.Value(ConnIDKey{}).(string)
-	return ret
-}
-
-func ValueClientIP(ctx context.Context) string {
-	ret, _ := ctx.Value(ClientIPKey{}).(string)
-	return ret
-}
-
-func ValueConnMeta(ctx context.Context) ConnectionMeta {
-	ret, _ := ctx.Value(ConnectionInfoKey{}).(ConnectionMeta)
-	return ret
 }

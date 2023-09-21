@@ -22,8 +22,8 @@ import (
 
 	"github.com/emicklei/go-restful/v3"
 
-	"github.com/polaris-contrib/apiserver-nacos/core"
 	v1 "github.com/polaris-contrib/apiserver-nacos/v1"
+	nacoshttp "github.com/polaris-contrib/apiserver-nacos/v1/http"
 )
 
 func (n *NacosV2Server) RegistryDebugRoute() {
@@ -37,14 +37,14 @@ func (n *NacosV2Server) RegistryDebugRoute() {
 
 // DescribeConnections 查询 V2 客户端的连接
 func (n *NacosV2Server) DescribeConnections(req *restful.Request, rsp *restful.Response) {
-	connections := n.connectionManager.listConnections()
+	connections := n.connectionManager.ListConnections()
 
 	ret := map[string]interface{}{}
 	ret["code"] = 200
 	ret["count"] = len(connections)
 	ret["connections"] = connections
 
-	core.WrirteNacosResponse(ret, rsp)
+	nacoshttp.WrirteNacosResponse(ret, rsp)
 }
 
 // DescribeConnectionDetail 查询某一个连接ID的详细信息
@@ -60,5 +60,5 @@ func (n *NacosV2Server) DescribeConnectionDetail(req *restful.Request, rsp *rest
 		ret["code"] = 404
 	}
 
-	core.WrirteNacosResponseWithCode(http.StatusNotFound, ret, rsp)
+	nacoshttp.WrirteNacosResponseWithCode(http.StatusNotFound, ret, rsp)
 }

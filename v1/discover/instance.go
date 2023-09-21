@@ -15,7 +15,7 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package v1
+package discover
 
 import (
 	"context"
@@ -31,7 +31,7 @@ import (
 	"github.com/polaris-contrib/apiserver-nacos/model"
 )
 
-func (n *NacosV1Server) handleRegister(ctx context.Context, namespace, serviceName string, ins *model.Instance) error {
+func (n *DiscoverServer) handleRegister(ctx context.Context, namespace, serviceName string, ins *model.Instance) error {
 	specIns := model.PrepareSpecInstance(namespace, serviceName, ins)
 	resp := n.discoverSvr.RegisterInstance(ctx, specIns)
 	if apimodel.Code(resp.GetCode().GetValue()) != apimodel.Code_ExecuteSuccess {
@@ -43,7 +43,7 @@ func (n *NacosV1Server) handleRegister(ctx context.Context, namespace, serviceNa
 	return nil
 }
 
-func (n *NacosV1Server) handleUpdate(ctx context.Context, namespace, serviceName string, ins *model.Instance) error {
+func (n *DiscoverServer) handleUpdate(ctx context.Context, namespace, serviceName string, ins *model.Instance) error {
 	specIns := model.PrepareSpecInstance(namespace, serviceName, ins)
 	resp := n.discoverSvr.UpdateInstance(ctx, specIns)
 	if apimodel.Code(resp.GetCode().GetValue()) != apimodel.Code_ExecuteSuccess {
@@ -55,7 +55,7 @@ func (n *NacosV1Server) handleUpdate(ctx context.Context, namespace, serviceName
 	return nil
 }
 
-func (n *NacosV1Server) handleDeregister(ctx context.Context, namespace, service string, ins *model.Instance) error {
+func (n *DiscoverServer) handleDeregister(ctx context.Context, namespace, service string, ins *model.Instance) error {
 	specIns := model.PrepareSpecInstance(namespace, service, ins)
 	resp := n.discoverSvr.DeregisterInstance(ctx, specIns)
 	if apimodel.Code(resp.GetCode().GetValue()) != apimodel.Code_ExecuteSuccess {
@@ -68,7 +68,7 @@ func (n *NacosV1Server) handleDeregister(ctx context.Context, namespace, service
 }
 
 // handleBeat com.alibaba.nacos.naming.core.InstanceOperatorClientImpl#handleBeat
-func (n *NacosV1Server) handleBeat(ctx context.Context, namespace, service string,
+func (n *DiscoverServer) handleBeat(ctx context.Context, namespace, service string,
 	clientBeat *model.ClientBeat) (map[string]interface{}, error) {
 	svc := n.discoverSvr.Cache().Service().GetServiceByName(service, namespace)
 	if svc == nil {
@@ -110,7 +110,7 @@ func (n *NacosV1Server) handleBeat(ctx context.Context, namespace, service strin
 }
 
 // handleQueryInstances com.alibaba.nacos.naming.controllers.InstanceController#list
-func (n *NacosV1Server) handleQueryInstances(ctx context.Context, params map[string]string) (interface{}, error) {
+func (n *DiscoverServer) handleQueryInstances(ctx context.Context, params map[string]string) (interface{}, error) {
 	namespace := params[model.ParamNamespaceID]
 	group := model.GetGroupName(params[model.ParamServiceName])
 	service := model.GetServiceName(params[model.ParamServiceName])

@@ -15,29 +15,10 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package v1
+package discover
 
-import (
-	"context"
+import "github.com/polaris-contrib/apiserver-nacos/logger"
 
-	"github.com/polarismesh/polaris/common/model"
+var (
+	nacoslog = logger.GetNacosLog()
 )
-
-func (n *NacosV1Server) handleLogin(ctx context.Context, params map[string]string) (map[string]interface{}, error) {
-	username := params["username"]
-	token := params["password"]
-	authCtx := model.NewAcquireContext(
-		model.WithFromClient(),
-		model.WithRequestContext(ctx),
-	)
-	if err := n.checker.GetAuthChecker().VerifyCredential(authCtx); err != nil {
-		return nil, err
-	}
-
-	return map[string]interface{}{
-		"accessToken": token,
-		"tokenTtl":    120,
-		"globalAdmin": false,
-		"username":    username,
-	}, nil
-}

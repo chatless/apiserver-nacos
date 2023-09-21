@@ -21,6 +21,7 @@ import (
 	"github.com/polarismesh/polaris/auth"
 	connlimit "github.com/polarismesh/polaris/common/conn/limit"
 	"github.com/polarismesh/polaris/common/secure"
+	"github.com/polarismesh/polaris/config"
 	"github.com/polarismesh/polaris/namespace"
 	"github.com/polarismesh/polaris/service"
 	"github.com/polarismesh/polaris/service/healthcheck"
@@ -42,25 +43,35 @@ func WithConnLimitConfig(connLimitConfig *connlimit.Config) option {
 
 func WithNamespaceSvr(namespaceSvr namespace.NamespaceOperateServer) option {
 	return func(svr *NacosV1Server) {
-		svr.namespaceSvr = namespaceSvr
+		svr.discoverOpt.NamespaceSvr = namespaceSvr
+		svr.configOpt.NamespaceSvr = namespaceSvr
 	}
 }
 
-func WithDiscoverSvr(discoverSvr service.DiscoverServer) option {
+func WithDiscoverSvr(discoverSvr service.DiscoverServer, originSvr service.DiscoverServer,
+	healthSvr *healthcheck.Server) option {
 	return func(svr *NacosV1Server) {
-		svr.discoverSvr = discoverSvr
+		svr.discoverOpt.DiscoverSvr = discoverSvr
+		svr.discoverOpt.OriginDiscoverSvr = originSvr
+		svr.discoverOpt.HealthSvr = healthSvr
 	}
 }
 
-func WithHealthSvr(healthSvr *healthcheck.Server) option {
+func WithConfigSvr(configSvr config.ConfigCenterServer, originSvr config.ConfigCenterServer) option {
 	return func(svr *NacosV1Server) {
-		svr.healthSvr = healthSvr
+		svr.configOpt.ConfigSvr = configSvr
+		svr.configOpt.OriginConfigSvr = originSvr
 	}
 }
 
 func WithAuthSvr(userSvr auth.UserServer, checkerSvr auth.StrategyServer) option {
 	return func(svr *NacosV1Server) {
-		svr.userSvr = userSvr
-		svr.checkerSvr = checkerSvr
+		svr.checker = checkerSvr
+
+		svr.discoverOpt.UserSvr = userSvr
+		svr.discoverOpt.CheckerSvr = checkerSvr
+
+		svr.configOpt.UserSvr = userSvr
+		svr.configOpt.CheckerSvr = checkerSvr
 	}
 }

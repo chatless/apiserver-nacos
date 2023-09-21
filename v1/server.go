@@ -35,15 +35,15 @@ import (
 	"github.com/polarismesh/polaris/common/metrics"
 	"github.com/polarismesh/polaris/common/secure"
 	"github.com/polarismesh/polaris/common/utils"
-	"github.com/polarismesh/polaris/namespace"
 	"github.com/polarismesh/polaris/plugin"
-	"github.com/polarismesh/polaris/service"
-	"github.com/polarismesh/polaris/service/healthcheck"
 	apimodel "github.com/polarismesh/specification/source/go/api/v1/model"
 	"go.uber.org/zap"
 
 	"github.com/polaris-contrib/apiserver-nacos/core"
 	"github.com/polaris-contrib/apiserver-nacos/model"
+	"github.com/polaris-contrib/apiserver-nacos/v1/config"
+	"github.com/polaris-contrib/apiserver-nacos/v1/discover"
+	nacoshttp "github.com/polaris-contrib/apiserver-nacos/v1/http"
 )
 
 func NewNacosV1Server(store *core.NacosDataStorage, options ...option) *NacosV1Server {
@@ -75,11 +75,13 @@ type NacosV1Server struct {
 	pushCenter core.PushCenter
 	store      *core.NacosDataStorage
 
-	userSvr      auth.UserServer
-	checkerSvr   auth.StrategyServer
-	namespaceSvr namespace.NamespaceOperateServer
-	discoverSvr  service.DiscoverServer
-	healthSvr    *healthcheck.Server
+	checker auth.StrategyServer
+
+	discoverOpt *discover.ServerOption
+	discoverSvr *discover.DiscoverServer
+
+	configOpt *config.ServerOption
+	configSvr *config.ConfigServer
 }
 
 // GetProtocol 获取Server的协议
@@ -98,12 +100,6 @@ func (h *NacosV1Server) Initialize(_ context.Context, option map[string]interfac
 		log.Infof("nacos http server open the ratelimit")
 		h.rateLimit = rateLimit
 	}
-
-	udpPush, err := NewUDPPushCenter(h.store)
-	if err != nil {
-		return err
-	}
-	h.pushCenter = udpPush
 
 	if whitelist := plugin.GetWhitelist(); whitelist != nil {
 		log.Infof("nacos http server open the whitelist")
@@ -194,7 +190,7 @@ func (h *NacosV1Server) createRestfulContainer() (*restful.Container, error) {
 	wsContainer.Filter(wsContainer.OPTIONSFilter)
 	wsContainer.Filter(h.process)
 
-	clientSvc, err := h.GetClientServer()
+	clientSvc, err := h.discoverSvr.GetClientServer()
 	if err != nil {
 		return nil, err
 	}
@@ -316,7 +312,7 @@ func (h *NacosV1Server) enterAuth(req *restful.Request, rsp *restful.Response) e
 		log.Error("nacos http server http access is not allowed",
 			zap.String("client", address),
 			utils.ZapRequestID(rid))
-		core.WrirteNacosErrorResponse(&model.NacosApiError{
+		nacoshttp.WrirteNacosErrorResponse(&model.NacosApiError{
 			DetailErrCode: int32(apimodel.Code_NotAllowedAccess),
 		}, rsp)
 		return errors.New("nacos http server http access is not allowed")
@@ -342,7 +338,7 @@ func (h *NacosV1Server) enterRateLimit(req *restful.Request, rsp *restful.Respon
 	if ok := h.rateLimit.Allow(plugin.IPRatelimit, segments[0]); !ok {
 		log.Error("nacos http server ip ratelimit is not allow", zap.String("client", address),
 			utils.ZapRequestID(rid))
-		core.WrirteNacosErrorResponse(&model.NacosApiError{
+		nacoshttp.WrirteNacosErrorResponse(&model.NacosApiError{
 			DetailErrCode: int32(apimodel.Code_IPRateLimit),
 		}, rsp)
 		return errors.New("ip ratelimit is not allow")
@@ -354,7 +350,7 @@ func (h *NacosV1Server) enterRateLimit(req *restful.Request, rsp *restful.Respon
 	if ok := h.rateLimit.Allow(plugin.APIRatelimit, apiName); !ok {
 		log.Error("nacos http server api ratelimit is not allow", zap.String("client", address),
 			utils.ZapRequestID(rid), zap.String("api", apiName))
-		core.WrirteNacosErrorResponse(&model.NacosApiError{
+		nacoshttp.WrirteNacosErrorResponse(&model.NacosApiError{
 			DetailErrCode: int32(apimodel.Code_APIRateLimit),
 		}, rsp)
 		return errors.New("api ratelimit is not allow")

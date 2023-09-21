@@ -1,6 +1,6 @@
 module github.com/polaris-contrib/apiserver-nacos
 
-go 1.19
+go 1.21
 
 require (
 	github.com/emicklei/go-restful/v3 v3.10.2

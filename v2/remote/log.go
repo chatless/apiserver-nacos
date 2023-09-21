@@ -15,33 +15,10 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package core
+package remote
 
-import (
-	"net/http"
+import "github.com/polaris-contrib/apiserver-nacos/logger"
 
-	"github.com/emicklei/go-restful/v3"
+var (
+	nacoslog = logger.GetNacosLog()
 )
-
-// WrirteSimpleResponse .
-func WrirteSimpleResponse(data string, code int, resp *restful.Response) {
-	resp.WriteHeader(code)
-	_, _ = resp.Write([]byte(data))
-}
-
-// WrirteNacosResponse .
-func WrirteNacosResponse(data interface{}, resp *restful.Response) {
-	resp.WriteHeader(http.StatusOK)
-	_ = resp.WriteAsJson(data)
-}
-
-// WrirteNacosResponseWithCode .
-func WrirteNacosResponseWithCode(code int, data interface{}, resp *restful.Response) {
-	resp.WriteHeader(code)
-	_ = resp.WriteAsJson(data)
-}
-
-// WrirteNacosErrorResponse .
-func WrirteNacosErrorResponse(data error, resp *restful.Response) {
-
-}

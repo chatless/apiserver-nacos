@@ -15,17 +15,43 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package v1
+package http
 
 import (
 	"context"
 	"encoding/json"
-	"io/ioutil"
+	"fmt"
+	"io"
+	"net/http"
+	"strconv"
 	"strings"
 
 	restful "github.com/emicklei/go-restful/v3"
 	"github.com/polarismesh/polaris/common/utils"
 )
+
+// WrirteSimpleResponse .
+func WrirteSimpleResponse(data string, code int, resp *restful.Response) {
+	resp.WriteHeader(code)
+	_, _ = resp.Write([]byte(data))
+}
+
+// WrirteNacosResponse .
+func WrirteNacosResponse(data interface{}, resp *restful.Response) {
+	resp.WriteHeader(http.StatusOK)
+	_ = resp.WriteAsJson(data)
+}
+
+// WrirteNacosResponseWithCode .
+func WrirteNacosResponseWithCode(code int, data interface{}, resp *restful.Response) {
+	resp.WriteHeader(code)
+	_ = resp.WriteAsJson(data)
+}
+
+// WrirteNacosErrorResponse .
+func WrirteNacosErrorResponse(data error, resp *restful.Response) {
+
+}
 
 // Handler HTTP请求/回复处理器
 type Handler struct {
@@ -78,7 +104,7 @@ func ParseQueryParams(req *restful.Request) map[string]string {
 
 // ParseJsonBody parse http body as json object
 func ParseJsonBody(req *restful.Request, value interface{}) error {
-	body, err := ioutil.ReadAll(req.Request.Body)
+	body, err := io.ReadAll(req.Request.Body)
 	if err != nil {
 		return err
 	}
@@ -86,4 +112,34 @@ func ParseJsonBody(req *restful.Request, value interface{}) error {
 		return err
 	}
 	return nil
+}
+
+func Optional(req *restful.Request, key, defaultVal string) string {
+	val := req.QueryParameter(key)
+	val = strings.TrimSpace(val)
+	if len(val) == 0 {
+		return defaultVal
+	}
+	return val
+}
+
+func Required(req *restful.Request, key string) (string, error) {
+	val := req.QueryParameter(key)
+	val = strings.TrimSpace(val)
+	if len(val) == 0 {
+		return "", fmt.Errorf("key: %s required", key)
+	}
+	return val, nil
+}
+
+func RequiredInt(req *restful.Request, key string) (int, error) {
+	strValue, err := Required(req, key)
+	if err != nil {
+		return 0, err
+	}
+	value, err := strconv.Atoi(strValue)
+	if err != nil {
+		return 0, fmt.Errorf("key: %s is not a number", key)
+	}
+	return value, nil
 }

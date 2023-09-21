@@ -25,6 +25,7 @@ import (
 	"github.com/polarismesh/polaris/auth"
 	connlimit "github.com/polarismesh/polaris/common/conn/limit"
 	"github.com/polarismesh/polaris/common/secure"
+	"github.com/polarismesh/polaris/config"
 	"github.com/polarismesh/polaris/namespace"
 	"github.com/polarismesh/polaris/service"
 	"github.com/polarismesh/polaris/service/healthcheck"
@@ -56,6 +57,8 @@ type NacosServer struct {
 	namespaceSvr      namespace.NamespaceOperateServer
 	discoverSvr       service.DiscoverServer
 	originDiscoverSvr service.DiscoverServer
+	configSvr         config.ConfigCenterServer
+	originConfigSvr   config.ConfigCenterServer
 	healthSvr         *healthcheck.Server
 
 	v1Svr *nacosv1.NacosV1Server
@@ -142,7 +145,7 @@ func copyOption(m map[string]interface{}) map[string]interface{} {
 	return ret
 }
 
-func (n *NacosServer) prepareRun() error {
+func (n *NacosServer) initPolarisResource() error {
 	var err error
 	n.namespaceSvr, err = namespace.GetServer()
 	if err != nil {
@@ -157,6 +160,19 @@ func (n *NacosServer) prepareRun() error {
 	if err != nil {
 		return err
 	}
+	n.healthSvr, err = healthcheck.GetServer()
+	if err != nil {
+		return err
+	}
+
+	n.configSvr, err = config.GetServer()
+	if err != nil {
+		return err
+	}
+	n.originConfigSvr, err = config.GetOriginServer()
+	if err != nil {
+		return err
+	}
 
 	n.userSvr, err = auth.GetUserServer()
 	if err != nil {
@@ -166,18 +182,21 @@ func (n *NacosServer) prepareRun() error {
 	if err != nil {
 		return err
 	}
+	return nil
+}
 
-	n.healthSvr, err = healthcheck.GetServer()
-	if err != nil {
+func (n *NacosServer) prepareRun() error {
+	if err := n.initPolarisResource(); err != nil {
 		return err
 	}
+
 	n.store = core.NewNacosDataStorage(n.discoverSvr.Cache())
 	n.v1Svr = nacosv1.NewNacosV1Server(n.store,
 		nacosv1.WithConnLimitConfig(n.connLimitConfig),
 		nacosv1.WithTLS(n.tlsInfo),
 		nacosv1.WithNamespaceSvr(n.namespaceSvr),
-		nacosv1.WithDiscoverSvr(n.discoverSvr),
-		nacosv1.WithHealthSvr(n.healthSvr),
+		nacosv1.WithDiscoverSvr(n.discoverSvr, n.originDiscoverSvr, n.healthSvr),
+		nacosv1.WithConfigSvr(n.configSvr, n.originConfigSvr),
 		nacosv1.WithAuthSvr(n.userSvr, n.strategySvr),
 	)
 
@@ -185,9 +204,8 @@ func (n *NacosServer) prepareRun() error {
 		nacosv2.WithConnLimitConfig(n.connLimitConfig),
 		nacosv2.WithTLS(n.tlsInfo),
 		nacosv2.WithNamespaceSvr(n.namespaceSvr),
-		nacosv2.WithDiscoverSvr(n.discoverSvr),
-		nacosv2.WithOriginDiscoverSvr(n.originDiscoverSvr),
-		nacosv2.WithHealthSvr(n.healthSvr),
+		nacosv2.WithDiscoverSvr(n.discoverSvr, n.originDiscoverSvr, n.healthSvr),
+		nacosv2.WithConfigSvr(n.configSvr, n.originConfigSvr),
 		nacosv2.WithAuthSvr(n.userSvr, n.strategySvr),
 	)
 
@@ -199,6 +217,9 @@ func (n *NacosServer) prepareRun() error {
 func (n *NacosServer) Stop() {
 	if n.v1Svr != nil {
 		n.v1Svr.Stop()
+	}
+	if n.v2Svr != nil {
+		n.v2Svr.Stop()
 	}
 }
 

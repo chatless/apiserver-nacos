@@ -15,7 +15,7 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package v2
+package discover
 
 import (
 	"context"
@@ -34,13 +34,14 @@ import (
 	"go.uber.org/zap"
 
 	nacosmodel "github.com/polaris-contrib/apiserver-nacos/model"
+	"github.com/polaris-contrib/apiserver-nacos/v2/remote"
 )
 
 type Checker struct {
 	discoverSvr service.DiscoverServer
 
 	cacheMgr      *cache.CacheManager
-	connectionMgr *ConnectionManager
+	connectionMgr *remote.ConnectionManager
 	clientMgr     *ConnectionClientManager
 
 	lock sync.RWMutex
@@ -59,7 +60,7 @@ const (
 )
 
 // newChecker 创建 nacos 长连接和实例信息绑定关系的健康检查，如果长连接不存在，则该连接上绑定的实例信息将失效
-func newChecker(discoverSvr service.DiscoverServer, connectionMgr *ConnectionManager,
+func newChecker(discoverSvr service.DiscoverServer, connectionMgr *remote.ConnectionManager,
 	clientMgr *ConnectionClientManager) *Checker {
 
 	ctx, cancel := context.WithCancel(context.Background())

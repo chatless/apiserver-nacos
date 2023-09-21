@@ -21,6 +21,7 @@ import (
 	"context"
 
 	nacospb "github.com/polaris-contrib/apiserver-nacos/v2/pb"
+	"github.com/polaris-contrib/apiserver-nacos/v2/remote"
 )
 
 // handleServerCheckRequest 客户端首次发起请求，用于向 server 获取当前长连接的 ID 信息
@@ -30,7 +31,7 @@ func (h *NacosV2Server) handleServerCheckRequest(ctx context.Context, req nacosp
 		return nil, ErrorInvalidRequestBodyType
 	}
 	resp := nacospb.NewServerCheckResponse()
-	resp.ConnectionId = ValueConnID(ctx)
+	resp.ConnectionId = remote.ValueConnID(ctx)
 	return resp, nil
 }
 

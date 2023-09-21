@@ -17,6 +17,10 @@
 
 package nacos_grpc_service
 
+type MetaRequestInfo interface {
+	RequestMeta() interface{}
+}
+
 // ClientAbilities
 type ClientAbilities struct {
 }

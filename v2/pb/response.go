@@ -218,3 +218,43 @@ type ErrorResponse struct {
 func (c *ErrorResponse) GetResponseType() string {
 	return TypeErrorResponse
 }
+
+type ConfigChangeBatchListenResponse struct {
+	*Response
+	ChangedConfigs []ConfigContext `json:"changedConfigs"`
+}
+
+func (c *ConfigChangeBatchListenResponse) GetResponseType() string {
+	return "ConfigChangeBatchListenResponse"
+}
+
+type ConfigQueryResponse struct {
+	*Response
+	Content          string `json:"content"`
+	EncryptedDataKey string `json:"encryptedDataKey"`
+	ContentType      string `json:"contentType"`
+	Md5              string `json:"md5"`
+	LastModified     int64  `json:"lastModified"`
+	IsBeta           bool   `json:"isBeta"`
+	Tag              bool   `json:"tag"`
+}
+
+func (c *ConfigQueryResponse) GetResponseType() string {
+	return "ConfigQueryResponse"
+}
+
+type ConfigPublishResponse struct {
+	*Response
+}
+
+func (c *ConfigPublishResponse) GetResponseType() string {
+	return "ConfigPublishResponse"
+}
+
+type ConfigRemoveResponse struct {
+	*Response
+}
+
+func (c *ConfigRemoveResponse) GetResponseType() string {
+	return "ConfigRemoveResponse"
+}

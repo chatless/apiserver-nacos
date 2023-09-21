@@ -15,7 +15,7 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package v2
+package discover
 
 import (
 	"context"
@@ -31,13 +31,14 @@ import (
 
 	nacosmodel "github.com/polaris-contrib/apiserver-nacos/model"
 	nacospb "github.com/polaris-contrib/apiserver-nacos/v2/pb"
+	"github.com/polaris-contrib/apiserver-nacos/v2/remote"
 )
 
-func (h *NacosV2Server) handleInstanceRequest(ctx context.Context, req nacospb.BaseRequest,
+func (h *DiscoverServer) handleInstanceRequest(ctx context.Context, req nacospb.BaseRequest,
 	meta nacospb.RequestMeta) (nacospb.BaseResponse, error) {
 	insReq, ok := req.(*nacospb.InstanceRequest)
 	if !ok {
-		return nil, ErrorInvalidRequestBodyType
+		return nil, remote.ErrorInvalidRequestBodyType
 	}
 
 	namespace := nacosmodel.DefaultNacosNamespace
@@ -48,7 +49,7 @@ func (h *NacosV2Server) handleInstanceRequest(ctx context.Context, req nacospb.B
 	svcName := nacosmodel.BuildServiceName(insReq.ServiceName, insReq.GroupName)
 	ins := nacosmodel.PrepareSpecInstance(namespace, svcName, &insReq.Instance)
 	// 设置连接 ID 作为实例的 metadata 属性信息
-	ins.Metadata[nacosmodel.InternalNacosClientConnectionID] = ValueConnID(ctx)
+	ins.Metadata[nacosmodel.InternalNacosClientConnectionID] = remote.ValueConnID(ctx)
 
 	// 显示关闭实例的健康检查能力
 	ins.EnableHealthCheck = wrapperspb.Bool(false)
@@ -98,11 +99,11 @@ func (h *NacosV2Server) handleInstanceRequest(ctx context.Context, req nacospb.B
 	}, nil
 }
 
-func (h *NacosV2Server) handleBatchInstanceRequest(ctx context.Context, req nacospb.BaseRequest,
+func (h *DiscoverServer) handleBatchInstanceRequest(ctx context.Context, req nacospb.BaseRequest,
 	meta nacospb.RequestMeta) (nacospb.BaseResponse, error) {
 	batchInsReq, ok := req.(*nacospb.BatchInstanceRequest)
 	if !ok {
-		return nil, ErrorInvalidRequestBodyType
+		return nil, remote.ErrorInvalidRequestBodyType
 	}
 
 	namespace := nacosmodel.DefaultNacosNamespace
@@ -121,7 +122,7 @@ func (h *NacosV2Server) handleBatchInstanceRequest(ctx context.Context, req naco
 		for i := range batchInsReq.Instances {
 			insReq := batchInsReq.Instances[i]
 			ins := nacosmodel.PrepareSpecInstance(namespace, svcName, insReq)
-			ins.Metadata[nacosmodel.InternalNacosClientConnectionID] = ValueConnID(ctx)
+			ins.Metadata[nacosmodel.InternalNacosClientConnectionID] = remote.ValueConnID(ctx)
 			// 显示关闭实例的健康检查能力
 			ins.EnableHealthCheck = wrapperspb.Bool(false)
 			ins.HealthCheck = nil
@@ -166,11 +167,11 @@ func (h *NacosV2Server) handleBatchInstanceRequest(ctx context.Context, req naco
 	}, nil
 }
 
-func (h *NacosV2Server) HandleClientConnect(ctx context.Context, client *ConnectionClient) {
+func (h *DiscoverServer) HandleClientConnect(ctx context.Context, client *ConnectionClient) {
 	// do nothing
 }
 
-func (h *NacosV2Server) HandleClientDisConnect(ctx context.Context, client *ConnectionClient) {
+func (h *DiscoverServer) HandleClientDisConnect(ctx context.Context, client *ConnectionClient) {
 	client.RangePublishInstance(func(svc model.ServiceKey, ids []string) {
 		req := make([]*service_manage.Instance, 0, len(ids))
 		for i := range ids {

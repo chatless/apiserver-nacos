@@ -15,29 +15,32 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package v1
+package config
 
 import (
-	"context"
-
-	"github.com/polarismesh/polaris/common/model"
+	"github.com/polaris-contrib/apiserver-nacos/core"
+	"github.com/polaris-contrib/apiserver-nacos/v2/remote"
+	"github.com/polarismesh/polaris/auth"
+	"github.com/polarismesh/polaris/config"
+	"github.com/polarismesh/polaris/namespace"
 )
 
-func (n *NacosV1Server) handleLogin(ctx context.Context, params map[string]string) (map[string]interface{}, error) {
-	username := params["username"]
-	token := params["password"]
-	authCtx := model.NewAcquireContext(
-		model.WithFromClient(),
-		model.WithRequestContext(ctx),
-	)
-	if err := n.checker.GetAuthChecker().VerifyCredential(authCtx); err != nil {
-		return nil, err
-	}
+type ServerOption struct {
+	// nacos
+	ConnectionManager *remote.ConnectionManager
+	Store             *core.NacosDataStorage
 
-	return map[string]interface{}{
-		"accessToken": token,
-		"tokenTtl":    120,
-		"globalAdmin": false,
-		"username":    username,
-	}, nil
+	// polaris
+	UserSvr         auth.UserServer
+	CheckerSvr      auth.StrategyServer
+	NamespaceSvr    namespace.NamespaceOperateServer
+	ConfigSvr       config.ConfigCenterServer
+	OriginConfigSvr config.ConfigCenterServer
+}
+
+type ConfigServer struct {
+}
+
+func (h *ConfigServer) ListGRPCHandlers() map[string]*remote.RequestHandlerWarrper {
+	return nil
 }

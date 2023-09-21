@@ -27,11 +27,15 @@ import (
 
 // NamingRequest
 type NamingRequest struct {
-	Request
+	*Request
 	Namespace   string `json:"namespace"`
 	ServiceName string `json:"serviceName"`
 	GroupName   string `json:"groupName"`
 	Module      string `json:"module"`
+}
+
+func (n *NamingRequest) RequestMeta() interface{} {
+	return n
 }
 
 // NewNamingRequest
@@ -73,9 +77,13 @@ func (r *NamingRequest) GetStringToSign() string {
 
 // InstanceRequest
 type InstanceRequest struct {
-	NamingRequest
+	*NamingRequest
 	Type     string         `json:"type"`
 	Instance model.Instance `json:"instance"`
+}
+
+func (n *InstanceRequest) RequestMeta() interface{} {
+	return n.NamingRequest
 }
 
 // NewInstanceRequest
@@ -96,6 +104,10 @@ type BatchInstanceRequest struct {
 	*NamingRequest
 	Type      string            `json:"type"`
 	Instances []*model.Instance `json:"instances"`
+}
+
+func (n *BatchInstanceRequest) RequestMeta() interface{} {
+	return n.NamingRequest
 }
 
 func NewBatchInstanceRequest() *BatchInstanceRequest {
@@ -121,7 +133,7 @@ func (r *BatchInstanceRequest) Normalize() {
 
 // NotifySubscriberRequest
 type NotifySubscriberRequest struct {
-	NamingRequest
+	*NamingRequest
 	ServiceInfo *model.ServiceInfo `json:"serviceInfo"`
 }
 
@@ -138,9 +150,13 @@ func (r *NotifySubscriberRequest) GetRequestType() string {
 
 // SubscribeServiceRequest
 type SubscribeServiceRequest struct {
-	NamingRequest
+	*NamingRequest
 	Subscribe bool   `json:"subscribe"`
 	Clusters  string `json:"clusters"`
+}
+
+func (n *SubscribeServiceRequest) RequestMeta() interface{} {
+	return n.NamingRequest
 }
 
 // NewSubscribeServiceRequest .
@@ -158,10 +174,14 @@ func (r *SubscribeServiceRequest) GetRequestType() string {
 
 // ServiceListRequest
 type ServiceListRequest struct {
-	NamingRequest
+	*NamingRequest
 	PageNo   int    `json:"pageNo"`
 	PageSize int    `json:"pageSize"`
 	Selector string `json:"selector"`
+}
+
+func (n *ServiceListRequest) RequestMeta() interface{} {
+	return n.NamingRequest
 }
 
 // NewServiceListRequest .
@@ -180,10 +200,14 @@ func (r *ServiceListRequest) GetRequestType() string {
 
 // ServiceQueryRequest
 type ServiceQueryRequest struct {
-	NamingRequest
+	*NamingRequest
 	Cluster     string `json:"cluster"`
 	HealthyOnly bool   `json:"healthyOnly"`
 	UdpPort     int    `json:"udpPort"`
+}
+
+func (n *ServiceQueryRequest) RequestMeta() interface{} {
+	return n.NamingRequest
 }
 
 // NewServiceQueryRequest .
